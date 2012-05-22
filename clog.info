@@ -1,0 +1,3 @@
+name = Cookie Log
+description = Logs all cookie names that visitors have
+core = 7.x

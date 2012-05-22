@@ -1,0 +1,8 @@
+<?php
+
+/**
+ * Implements hook_uninstall().
+ */
+function clog_uninstall() {
+	variable_del('clog');
+}

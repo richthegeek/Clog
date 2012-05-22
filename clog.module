@@ -1,0 +1,125 @@
+<?php
+
+/**
+ * Implements hook_menu().
+ */
+function clog_menu() {
+	return array(
+		'admin/reports/cookies' => array(
+			'title' => t('Cookie info'),
+			'page callback' => '_clog_admin',
+			'access arguments' => array('access site reports'),
+		),
+		'admin/reports/cookies/clear_data' => array(
+			'title' => t('Cookie info - clear cookie log'),
+			'type' => MENU_CALLBACK,
+			'page callback' => '_clog_admin_clear',
+			'access arguments' => array('access site reports'),
+		),
+	);
+}
+
+/**
+ * Callback for admin/reports/cookies
+ */
+function _clog_admin() {
+	$cookies = (array) _clog_load();
+
+	$_GET += array('sort' => 'desc', 'order' => 'Count');
+	$fns = array(
+		'Name' => array('uksort', '_clog_sort_name'),
+		'Count' => array('uasort', '_clog_sort_count'),
+		'Last Set' => array('uasort', '_clog_sort_timestamp')
+	);
+	if (($fn = @$fns[$_GET['order']]) && function_exists($fn[1])) {
+		$sort = $fn[0];
+		$sort($cookies, $fn[1]);
+	}
+	if ($_GET['sort'] == 'desc') {
+		$cookies = array_reverse($cookies, true);
+	}
+
+	# make a sortable table of the data in $cookies.
+	$header = array(
+		array('data' => t('Name'), 'field' => 'name'),
+		array('data' => t('Count'), 'field' => 'count', 'sort' => 'desc'),
+		array('data' => t('Last Set'), 'field' => 'timestamp'),
+	);
+
+	$rows = array();
+	foreach ($cookies as $name => $data) {
+		$rows[] = array(
+			$name, $data->count, date('d/m/y H:i:s', $data->timestamp)
+		);
+	}
+
+	return array(
+		'table' => array(
+			'#theme' => 'table',
+			'#header' => $header,
+			'#rows' => $rows
+		),
+		'action' => array(
+			'#theme' => 'link',
+			'#path' => 'admin/reports/cookies/clear_data',
+			'#text' => 'Clear cookie log',
+			'#options' => array(
+				'attributes' => array(
+					'class' => array('button'),
+				),
+				'html' => false,
+				'text' => true,
+			),
+		),
+	);
+}
+
+function _clog_sort_name($a, $b) {
+	return strcmp($a, $b);
+}
+function _clog_sort_count($a, $b) {
+	return $a->count < $b->count ? -1 : 1;
+}
+function _clog_sort_timestamp($a, $b) {
+	return $a->timestamp < $b->timestamp ? -1 : 1;
+}
+
+/**
+ * Callback for admin/reports/cookies/clear_data.
+ */
+function _clog_admin_clear() {
+	variable_set('clog', '{}');
+	drupal_set_message('Cookie log cleared', 'status');
+	drupal_goto('admin/reports/cookies');
+}
+
+/**
+ * Implements hook_page_build().
+ */
+function clog_page_build(&$page) {
+	if (arg(0) != 'admin') {
+		_clog_log_cookies(array_keys($_COOKIE));
+	}
+}
+
+function _clog_log_cookies($names = array()) {
+	$list = _clog_load();
+	foreach ($names as $name) {
+		if (!isset($list->$name)) {
+			$list->$name = (object) array('count' => 0, 'timestamp' => 0);
+		}
+		$list->$name->count += 1;
+		$list->$name->timestamp = time();
+	}
+	_clog_save($list);
+}
+
+function _clog_load() {
+	return (object) json_decode(variable_get('clog', '{}'));
+}
+function _clog_save($data) {
+	if ($json = json_encode($data)) {
+		variable_set('clog', $json);
+		return true;
+	}
+}
